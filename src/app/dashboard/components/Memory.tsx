@@ -4,11 +4,10 @@ import { useState } from 'react';
 import { 
   FileText, 
   Brain, 
-  Heart, 
-  User, 
-  Wrench,
+  Wrench, 
   ChevronRight,
-  ExternalLink
+  X,
+  Loader2
 } from 'lucide-react';
 
 interface MemoryFile {
@@ -17,6 +16,12 @@ interface MemoryFile {
   type: 'core' | 'daily' | 'config';
   lastModified: string;
   size: string;
+}
+
+interface FileContent {
+  filename: string;
+  content: string;
+  lastModified: string;
 }
 
 const memoryFiles: MemoryFile[] = [
@@ -34,7 +39,9 @@ const dailyNotes = [
 ];
 
 export default function Memory() {
-  const [selectedFile, setSelectedFile] = useState<MemoryFile | null>(null);
+  const [selectedFile, setSelectedFile] = useState<FileContent | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const getFileIcon = (type: string) => {
     switch (type) {
@@ -45,6 +52,31 @@ export default function Memory() {
       default:
         return <FileText className="w-5 h-5 text-slate-400" />;
     }
+  };
+
+  const handleFileClick = async (filename: string) => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      const response = await fetch(`/api/memory?file=${encodeURIComponent(filename)}`);
+      
+      if (!response.ok) {
+        throw new Error('Error al cargar archivo');
+      }
+      
+      const data = await response.json();
+      setSelectedFile(data);
+    } catch (err) {
+      setError('No se pudo cargar el archivo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const closeModal = () => {
+    setSelectedFile(null);
+    setError('');
   };
 
   return (
@@ -71,7 +103,7 @@ export default function Memory() {
               {memoryFiles.filter(f => f.type === 'core').map((file) => (
                 <button
                   key={file.name}
-                  onClick={() => setSelectedFile(file)}
+                  onClick={() => handleFileClick(file.name)}
                   className="w-full px-4 py-3 flex items-center gap-3 hover:bg-slate-700/30 transition-colors text-left"
                 >
                   {getFileIcon(file.type)}
@@ -98,7 +130,7 @@ export default function Memory() {
               {memoryFiles.filter(f => f.type === 'config').map((file) => (
                 <button
                   key={file.name}
-                  onClick={() => setSelectedFile(file)}
+                  onClick={() => handleFileClick(file.name)}
                   className="w-full px-4 py-3 flex items-center gap-3 hover:bg-slate-700/30 transition-colors text-left"
                 >
                   {getFileIcon(file.type)}
@@ -157,6 +189,47 @@ export default function Memory() {
           </div>
         </div>
       </div>
+
+      {/* Modal de contenido */}
+      {selectedFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-4xl max-h-[80vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+              <div className="flex items-center gap-3">
+                <FileText className="w-5 h-5 text-indigo-400" />
+                <div>
+                  <h3 className="font-semibold text-white">{selectedFile.filename}</h3>
+                  <p className="text-xs text-slate-400">
+                    {new Date(selectedFile.lastModified).toLocaleString('es-ES')}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={closeModal}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-auto p-6">
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+                </div>
+              ) : error ? (
+                <div className="text-center py-12 text-red-400">{error}</div>
+              ) : (
+                <pre className="text-sm text-slate-300 whitespace-pre-wrap font-mono leading-relaxed">
+                  {selectedFile.content}
+                </pre>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
