@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Redis } from '@upstash/redis';
 
 // Archivos permitidos (whitelist de seguridad)
 const ALLOWED_FILES = [
@@ -12,8 +13,11 @@ const ALLOWED_FILES = [
   'BOOTSTRAP.md',
 ];
 
-// URL del servidor local de archivos
-const FILES_API_URL = process.env.FILES_API_URL || 'http://localhost:18790';
+// Conexión a Redis
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL || '',
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
+});
 
 export async function GET(request: NextRequest) {
   try {
@@ -34,35 +38,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Nombre de archivo inválido' }, { status: 400 });
     }
 
-    // Consultar al servidor local de archivos
-    const response = await fetch(`${FILES_API_URL}/file?name=${encodeURIComponent(filename)}`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
+    // Leer de Redis
+    const data = await redis.get(`miki:memory:${filename}`);
+    
+    if (!data) {
       return NextResponse.json(
-        { error: error.error || 'Error al obtener archivo' },
-        { status: response.status }
+        { error: 'Archivo no encontrado en caché. Sincronización pendiente.' },
+        { status: 404 }
       );
     }
 
-    const data = await response.json();
+    const parsed = typeof data === 'string' ? JSON.parse(data) : data;
 
     return NextResponse.json({
-      filename: data.name,
-      content: data.content,
-      lastModified: new Date().toISOString(),
+      filename: filename,
+      content: parsed.content,
+      lastModified: parsed.updated_at,
+      size: parsed.size,
     });
 
   } catch (error) {
     console.error('Error reading memory file:', error);
     return NextResponse.json(
-      { error: 'Servidor de archivos no disponible' },
-      { status: 503 }
+      { error: 'Error al leer archivo de Redis' },
+      { status: 500 }
     );
   }
 }
