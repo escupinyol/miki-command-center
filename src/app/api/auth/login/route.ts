@@ -7,16 +7,30 @@ import {
   verifyPassword,
   loginSchema 
 } from '@/lib/auth';
+import { sendTelegramNotification, formatLoginAttemptMessage } from '@/lib/notifications';
 
 export async function POST(request: NextRequest) {
   try {
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 
+               request.headers.get('x-real-ip') || 
+               'unknown';
+    const userAgent = request.headers.get('user-agent') || 'unknown';
+    const timestamp = new Date().toISOString();
     
     // Rate limiting
     const rateLimit = checkRateLimit(ip);
     if (!rateLimit.allowed) {
       const lockedUntil = rateLimit.lockedUntil || Date.now() + 3600000;
       const minutes = Math.ceil((lockedUntil - Date.now()) / 60000);
+      
+      // Notificar bloqueo
+      await sendTelegramNotification(formatLoginAttemptMessage({
+        success: false,
+        ip,
+        userAgent,
+        timestamp,
+        remainingAttempts: 0,
+      }));
       
       return NextResponse.json(
         { error: `Demasiados intentos. Cuenta bloqueada por ${minutes} minutos.` },
@@ -30,6 +44,15 @@ export async function POST(request: NextRequest) {
     
     if (!result.success) {
       recordFailedAttempt(ip);
+      
+      await sendTelegramNotification(formatLoginAttemptMessage({
+        success: false,
+        ip,
+        userAgent,
+        timestamp,
+        remainingAttempts: rateLimit.remaining,
+      }));
+      
       return NextResponse.json(
         { error: 'Datos inválidos', remaining: rateLimit.remaining },
         { status: 400 }
@@ -52,6 +75,15 @@ export async function POST(request: NextRequest) {
 
     if (!isValid) {
       recordFailedAttempt(ip);
+      
+      await sendTelegramNotification(formatLoginAttemptMessage({
+        success: false,
+        ip,
+        userAgent,
+        timestamp,
+        remainingAttempts: rateLimit.remaining,
+      }));
+      
       return NextResponse.json(
         { error: 'Contraseña incorrecta', remaining: rateLimit.remaining },
         { status: 401 }
@@ -63,6 +95,14 @@ export async function POST(request: NextRequest) {
     const session = await getSession();
     session.isAuthenticated = true;
     await session.save();
+
+    // Notificar acceso exitoso
+    await sendTelegramNotification(formatLoginAttemptMessage({
+      success: true,
+      ip,
+      userAgent,
+      timestamp,
+    }));
 
     return NextResponse.json({ success: true });
 
