@@ -6,7 +6,7 @@ import {
   Brain, 
   Heart, 
   User, 
-  Tool,
+  Wrench,
   ChevronRight,
   ExternalLink
 } from 'lucide-react';
@@ -41,7 +41,7 @@ export default function Memory() {
       case 'core':
         return <Brain className="w-5 h-5 text-purple-400" />;
       case 'config':
-        return <Tool className="w-5 h-5 text-blue-400" />;
+        return <Wrench className="w-5 h-5 text-blue-400" />;
       default:
         return <FileText className="w-5 h-5 text-slate-400" />;
     }
@@ -89,7 +89,7 @@ export default function Memory() {
           <div className="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-700 bg-slate-800/80">
               <div className="flex items-center gap-2">
-                <Tool className="w-5 h-5 text-blue-400" />
+                <Wrench className="w-5 h-5 text-blue-400" />
                 <span className="font-medium text-white">Configuración</span>
               </div>
             </div>
