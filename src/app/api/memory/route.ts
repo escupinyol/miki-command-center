@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readFile } from 'fs/promises';
-import { join } from 'path';
-import { existsSync } from 'fs';
 
 // Archivos permitidos (whitelist de seguridad)
 const ALLOWED_FILES = [
@@ -15,7 +12,8 @@ const ALLOWED_FILES = [
   'BOOTSTRAP.md',
 ];
 
-const WORKSPACE_DIR = process.env.WORKSPACE_DIR || '/root/.openclaw/workspace';
+// URL del servidor local de archivos
+const FILES_API_URL = process.env.FILES_API_URL || 'http://localhost:18790';
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,24 +34,35 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Nombre de archivo inválido' }, { status: 400 });
     }
 
-    const filePath = join(WORKSPACE_DIR, filename);
+    // Consultar al servidor local de archivos
+    const response = await fetch(`${FILES_API_URL}/file?name=${encodeURIComponent(filename)}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
 
-    // Verificar que existe
-    if (!existsSync(filePath)) {
-      return NextResponse.json({ error: 'Archivo no encontrado' }, { status: 404 });
+    if (!response.ok) {
+      const error = await response.json();
+      return NextResponse.json(
+        { error: error.error || 'Error al obtener archivo' },
+        { status: response.status }
+      );
     }
 
-    // Leer contenido
-    const content = await readFile(filePath, 'utf-8');
+    const data = await response.json();
 
-    return NextResponse.json({ 
-      filename,
-      content,
+    return NextResponse.json({
+      filename: data.name,
+      content: data.content,
       lastModified: new Date().toISOString(),
     });
 
   } catch (error) {
     console.error('Error reading memory file:', error);
-    return NextResponse.json({ error: 'Error al leer archivo' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Servidor de archivos no disponible' },
+      { status: 503 }
+    );
   }
 }
