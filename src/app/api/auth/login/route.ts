@@ -40,14 +40,15 @@ export async function POST(request: NextRequest) {
     const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH;
 
     if (!adminPasswordHash) {
+      console.error('ADMIN_PASSWORD_HASH no configurado');
       return NextResponse.json(
         { error: 'Configuración incompleta' },
         { status: 500 }
       );
     }
 
-    // Verificación de contraseña
-    const isValid = verifyPassword(password, adminPasswordHash);
+    // Verificación de contraseña con bcrypt
+    const isValid = await verifyPassword(password, adminPasswordHash);
 
     if (!isValid) {
       recordFailedAttempt(ip);

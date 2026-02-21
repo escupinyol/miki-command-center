@@ -1,6 +1,6 @@
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
-import { createHash, randomBytes, timingSafeEqual } from 'crypto';
+import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 
 const sessionConfig = {
@@ -10,7 +10,7 @@ const sessionConfig = {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: 'strict' as const,
-    maxAge: 60 * 60 * 24 * 7, // 7 días
+    maxAge: 60 * 60 * 24 * 7,
   },
 };
 
@@ -26,12 +26,12 @@ export async function getSession() {
   return getIronSession<SessionData>(cookieStore, sessionConfig);
 }
 
-// Rate limiting en memoria (para serverless es suficiente)
+// Rate limiting
 const loginAttempts = new Map<string, { count: number; lastAttempt: number; lockedUntil?: number }>();
 
 const RATE_LIMIT_MAX = 5;
-const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutos
-const LOCKOUT_DURATION = 60 * 60 * 1000; // 1 hora
+const RATE_LIMIT_WINDOW = 15 * 60 * 1000;
+const LOCKOUT_DURATION = 60 * 60 * 1000;
 
 export function checkRateLimit(ip: string): { allowed: boolean; remaining: number; lockedUntil?: number } {
   const now = Date.now();
@@ -41,18 +41,15 @@ export function checkRateLimit(ip: string): { allowed: boolean; remaining: numbe
     return { allowed: true, remaining: RATE_LIMIT_MAX - 1 };
   }
 
-  // Si está bloqueado
   if (record.lockedUntil && now < record.lockedUntil) {
     return { allowed: false, remaining: 0, lockedUntil: record.lockedUntil };
   }
 
-  // Reset si pasó la ventana
   if (now - record.lastAttempt > RATE_LIMIT_WINDOW) {
     loginAttempts.set(ip, { count: 1, lastAttempt: now });
     return { allowed: true, remaining: RATE_LIMIT_MAX - 1 };
   }
 
-  // Verificar si debe bloquearse
   if (record.count >= RATE_LIMIT_MAX) {
     const lockedUntil = now + LOCKOUT_DURATION;
     record.lockedUntil = lockedUntil;
@@ -78,31 +75,21 @@ export function clearAttempts(ip: string) {
   loginAttempts.delete(ip);
 }
 
-// Hash de contraseña seguro (PBKDF2)
-export function hashPassword(password: string): string {
-  const salt = randomBytes(32).toString('hex');
-  const hash = createHash('sha256')
-    .update(password + salt + process.env.SESSION_SECRET)
-    .digest('hex');
-  return `${salt}:${hash}`;
-}
-
-export function verifyPassword(password: string, hashed: string): boolean {
-  const [salt, hash] = hashed.split(':');
-  if (!salt || !hash) return false;
-  
-  const computed = createHash('sha256')
-    .update(password + salt + process.env.SESSION_SECRET)
-    .digest('hex');
-  
+// Verificación de contraseña usando bcrypt
+export async function verifyPassword(password: string, hashedPassword: string): Promise<boolean> {
   try {
-    return timingSafeEqual(Buffer.from(hash), Buffer.from(computed));
+    return await bcrypt.compare(password, hashedPassword);
   } catch {
     return false;
   }
 }
 
-// Validación de input
+// Generar hash (solo para setup inicial)
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 12);
+}
+
+// Validación
 export const loginSchema = z.object({
   password: z.string().min(1).max(128),
 });

@@ -10,8 +10,10 @@
     "hash": "node scripts/generate-hash.js"
   },
   "dependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@upstash/redis": "^1.36.2",
     "@vercel/kv": "^3.0.0",
+    "bcryptjs": "^3.0.3",
     "date-fns": "^4.1.0",
     "iron-session": "^8.0.4",
     "lucide-react": "^0.575.0",
