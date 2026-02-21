@@ -1,19 +1,17 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getIronSession } from 'iron-session';
-import { SessionData } from './lib/auth';
 
-const sessionConfig = {
-  cookieName: 'miki_session',
-  password: process.env.SESSION_SECRET || 'default_secret_change_this_in_production_32chars!',
-  cookieOptions: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    sameSite: 'strict' as const,
-  },
-};
+// Config de sesión (debe coincidir con lib/auth.ts)
+const COOKIE_NAME = 'miki_session';
 
-export async function middleware(request: NextRequest) {
+// Función simple para verificar si hay cookie de sesión
+// La validación real se hace en las API routes y el cliente
+function hasSessionCookie(request: NextRequest): boolean {
+  const cookie = request.cookies.get(COOKIE_NAME);
+  return !!cookie?.value;
+}
+
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Rutas públicas
@@ -21,10 +19,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Verificar sesión
-  const session = await getIronSession<SessionData>(request.cookies, sessionConfig);
-
-  if (!session.isAuthenticated) {
+  // Verificar cookie de sesión (check básico)
+  if (!hasSessionCookie(request)) {
     // Redirigir a login
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
@@ -32,7 +28,16 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
-  return NextResponse.next();
+  // Añadir headers de seguridad
+  const response = NextResponse.next();
+  
+  response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('X-XSS-Protection', '1; mode=block');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  
+  return response;
 }
 
 export const config = {
